@@ -37,3 +37,25 @@ variable "ip_allocation" {
     error_message = "var.ip_allocation must be a non-empty string"
   }
 }
+
+variable "type" {
+  type        = string
+  description = "Data Fusion instance tier"
+  default     = "BASIC"
+
+  validation {
+    condition     = contains(["BASIC", "ENTERPRISE", "DEVELOPER"], var.type)
+    error_message = "var.type must be one of BASIC, ENTERPRISE, DEVELOPER"
+  }
+}
+
+variable "crypto_key_reference" {
+  type        = string
+  description = "The resource name of the KMS crypto key used to encrypt/decrypt data in the Data Fusion instance. The expected format is: projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}"
+  sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.crypto_key_reference)) > 0
+    error_message = "var.crypto_key_reference must be a non-empty string"
+  }
+}
