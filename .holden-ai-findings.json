@@ -1,0 +1,45 @@
+{
+  "scan_date": "2026-08-09T11:16:09Z",
+  "scan_path": ".",
+  "findings": [
+    {
+      "id": "HOLDEN_AI_001",
+      "status": "fixed",
+      "first_seen": "2026-08-09",
+      "last_seen": "2026-08-09",
+      "suppression_reason": null,
+      "principle": "reliability",
+      "severity": "MEDIUM",
+      "confidence": "medium",
+      "title": "Data Fusion's ip_allocation CIDR is never reserved via Private Service Access peering",
+      "file": "example/examplea/module.datafusion.tf",
+      "line": 7,
+      "resource": "module.datafusion",
+      "related_resources": ["example/examplea/google_compute_network.tf#google_compute_network.private"],
+      "explanation": "A private Cloud Data Fusion instance's network_config.ip_allocation must be a CIDR range already reserved for the target VPC via a google_compute_global_address (purpose = VPC_PEERING) peered to servicenetworking.googleapis.com through google_service_networking_connection. The example passes ip_allocation = \"10.92.48.0/22\" against google_compute_network.private, which is a bare custom-mode VPC (auto_create_subnetworks = false) with no subnets, no reserved global address, and no service networking connection anywhere in the repo. Each resource passes its own checks individually (holden has no rule correlating google_data_fusion_instance.network_config.ip_allocation against google_service_networking_connection.reserved_peering_ranges across three resource types), but the composition means instance creation is likely to fail with a 'network does not have a private connection to source services' error from the Data Fusion API, the same class of pre-flight-plumbing gap as the CMEK IAM grant already fixed in this file.",
+      "remediation": "Add a google_compute_global_address (purpose = VPC_PEERING, address_type = INTERNAL, address = \"10.92.48.0\", prefix_length = 22, network = google_compute_network.private.id) and a google_service_networking_connection (network = google_compute_network.private.id, service = \"servicenetworking.googleapis.com\", reserved_peering_ranges = [that address's name]), and add the connection to module.datafusion's depends_on alongside the existing KMS binding.",
+      "fixable": true,
+      "fix": "resource \"google_compute_global_address\" \"datafusion_psa_range\" {\n  name          = \"datafusion-psa-range\"\n  purpose       = \"VPC_PEERING\"\n  address_type  = \"INTERNAL\"\n  address       = \"10.92.48.0\"\n  prefix_length = 22\n  network       = google_compute_network.private.id\n}\n\nresource \"google_service_networking_connection\" \"datafusion\" {\n  network                 = google_compute_network.private.id\n  service                 = \"servicenetworking.googleapis.com\"\n  reserved_peering_ranges = [google_compute_global_address.datafusion_psa_range.name]\n}\n"
+    },
+    {
+      "id": "HOLDEN_AI_002",
+      "status": "suppressed",
+      "first_seen": "2026-08-09",
+      "last_seen": "2026-08-09",
+      "suppression_reason": "Won't fix — user (james.woolfenden@gmail.com) declined a time_sleep-based mitigation as an arbitrary workaround. Accepted as residual risk: Data Fusion instance provisioning takes 20-30+ minutes, so IAM propagation (seconds to a couple minutes) will almost always complete before the control plane needs the CMEK grant. If it ever does fail on first apply, the fix is a plain terraform apply re-run.",
+      "principle": "reliability",
+      "severity": "LOW",
+      "confidence": "medium",
+      "title": "CMEK IAM grant and the resource that depends on it are ordered by Terraform but not by IAM propagation",
+      "file": "example/examplea/module.datafusion.tf",
+      "line": 2,
+      "resource": "module.datafusion",
+      "related_resources": ["google_kms_crypto_key_iam_member.datafusion", "google_project_service_identity.datafusion"],
+      "explanation": "depends_on = [google_kms_crypto_key_iam_member.datafusion] guarantees Terraform issues the IAM grant API call before the Data Fusion create call, but Cloud IAM bindings are eventually consistent — the grant can take up to several minutes to propagate. No deterministic rule models this because it's a timing property of the GCP control plane, not a static attribute. In practice Data Fusion instance provisioning itself runs for many minutes, so the window is usually absorbed, but this is not guaranteed and has been a known source of flaky first-apply failures in other Data Fusion CMEK setups.",
+      "remediation": "If a first-apply failure is ever observed here, add a short time_sleep (time provider) between google_kms_crypto_key_iam_member.datafusion and module.datafusion, or document that a re-run of terraform apply resolves it. Not applying a fix now since the right choice (accept vs. add a sleep) is a judgment call, not a mechanical one.",
+      "fixable": false
+    }
+  ],
+  "suggested_policies": [],
+  "suggested_suppressions": []
+}
