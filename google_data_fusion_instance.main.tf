@@ -15,4 +15,3 @@ resource "google_data_fusion_instance" "main" {
     key_reference = var.crypto_key_reference
   }
 }
-
