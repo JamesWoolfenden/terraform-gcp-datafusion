@@ -51,6 +51,7 @@ resource "google_kms_crypto_key" "datafusion" {
   name            = "datafusion-key"
   key_ring        = google_kms_key_ring.datafusion.name
   rotation_period = "100000s"
+  destroy_scheduled_duration = "2592000s"
   lifecycle {
     prevent_destroy = true
   }
